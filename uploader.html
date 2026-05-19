@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>銷售資料更新工具</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:#f5f7fc;color:#0f1623;padding:32px 24px;min-height:100vh}
+.wrap{max-width:640px;margin:0 auto}
+h1{font-size:20px;font-weight:800;margin-bottom:6px}
+.sub{font-size:13px;color:#4a5372;margin-bottom:28px}
+.card{background:#fff;border:1px solid #e3e8f0;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(15,22,51,.06)}
+.card h2{font-size:14px;font-weight:700;margin-bottom:4px}
+.card p{font-size:12px;color:#4a5372;margin-bottom:14px;line-height:1.6}
+.drop{border:2px dashed #ccd4e0;border-radius:8px;padding:32px;text-align:center;cursor:pointer;transition:.2s;background:#fafbff}
+.drop:hover,.drop.over{border-color:#3b82f6;background:#eff6ff}
+.drop input{display:none}
+.drop-icon{font-size:28px;margin-bottom:8px}
+.drop-title{font-size:14px;font-weight:700;margin-bottom:4px}
+.drop-sub{font-size:12px;color:#8b95b4}
+.step{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f0f3f9;align-items:flex-start}
+.step:last-child{border-bottom:none}
+.step-num{width:22px;height:22px;background:#2563eb;color:#fff;border-radius:50%;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.step-text{font-size:13px;line-height:1.6;color:#4a5372}
+.step-text b{color:#0f1623}
+.file-list{margin-top:12px}
+.file-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#f4f7fb;border-radius:6px;margin-bottom:4px;font-size:13px}
+.file-ok{color:#10b981;font-size:14px}
+.file-err{color:#ef4444;font-size:14px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;background:#2563eb;color:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:.15s;font-family:inherit}
+.btn:hover{background:#1d4ed8}
+.btn:disabled{background:#9ca3af;cursor:not-allowed}
+.btn-g{background:#059669}.btn-g:hover{background:#047857}
+.status{margin-top:12px;font-size:13px;padding:10px 14px;border-radius:6px}
+.status.ok{background:#d1fae5;color:#065f46}
+.status.err{background:#fee2e2;color:#991b1b}
+.status.info{background:#dbeafe;color:#1e40af}
+code{background:#f0f3f9;padding:2px 6px;border-radius:4px;font-size:11.5px;font-family:'JetBrains Mono',monospace}
+a{color:#2563eb;text-decoration:none}
+a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📊 銷售資料更新工具</h1>
+  <div class="sub">上傳當月 Excel → 自動轉換 → 下載 JSON → 上傳到 GitHub</div>
+
+  <div class="card">
+    <h2>📋 使用步驟</h2>
+    <p></p>
+    <div class="step"><div class="step-num">1</div><div class="step-text">選擇當月 Excel 檔案（可以同時選多個月份）<br>檔名需包含月份，例如 <b>2026_06月.xlsx</b></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">等待轉換完成後，點「下載 biz_data.json」</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">打開 <a href="https://github.com/pinklinktw-beep/sales-dashboard" target="_blank">GitHub repo</a> → <code>data/</code> 資料夾 → 點 <code>biz_data.json</code> → 右上角鉛筆 → 貼上新內容 → Commit</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-text">約 1 分鐘後 <a href="https://pinklinktw-beep.github.io/sales-dashboard/" target="_blank">儀表板</a> 自動更新</div></div>
+  </div>
+
+  <div class="card">
+    <h2>📂 上傳 Excel 檔案</h2>
+    <p>支援同時上傳多個月份（01月～12月）。<b>2026_XX月.xlsx</b> 格式</p>
+    <div class="drop" id="drop-area">
+      <input type="file" id="file-input" accept=".xlsx" multiple>
+      <div class="drop-icon">📂</div>
+      <div class="drop-title">點擊選擇或拖曳 Excel 至此</div>
+      <div class="drop-sub">支援多選，格式：2026_06月.xlsx</div>
+    </div>
+    <div class="file-list" id="file-list"></div>
+    <div id="convert-status"></div>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" id="btn-convert" disabled>⚙️ 開始轉換</button>
+      <button class="btn btn-g" id="btn-download" disabled>⬇️ 下載 biz_data.json</button>
+    </div>
+  </div>
+
+  <div class="card" style="background:#fff9f0;border-color:#fcd34d">
+    <h2>⚠️ 注意事項</h2>
+    <p>• 這個工具只處理<b>經銷體系</b>的資料<br>
+    • 大使體系目前仍只有 2026-04 的真實資料<br>
+    • 排除名單（930530 何佩蓉）已固定在程式中<br>
+    • 轉換過程全部在你的瀏覽器進行，不會上傳到任何伺服器</p>
+  </div>
+</div>
+
+<script>
+// ── 設定 ──
+var EXCLUDED_ACCS  = {'930530': true};
+var EXCLUDED_NAMES = {'何佩蓉': true};
+var SHOPEE_HIGH = {as0114:1,cc530:1,aa520:1,ss522:1,k28:1,kbds1868:1,fly339:1,www888:1,yan1027:1,e0313:1,iru2510:1,a334961:1,s243130:1};
+var MANUAL_SHOPEE = {as0114:'鬆妤珊蝦皮團隊',cc530:'鬆妤珊蝦皮團隊',aa520:'鬆妤珊蝦皮團隊',ss522:'鬆妤珊蝦皮團隊',k28:'蔡旻辰蝦皮團隊',kbds1868:'蔡旻辰蝦皮團隊',fly339:'蔡旻辰蝦皮團隊',www888:'蔡旻辰蝦皮團隊',yan1027:'蔡旻辰蝦皮團隊',e0313:'蔡旻辰蝦皮團隊',iru2510:'個人蝦皮',a334961:'個人蝦皮',s243130:'個人蝦皮'};
+var MONTHS_ALL = ['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06','2026-07','2026-08','2026-09','2026-10','2026-11','2026-12'];
+
+function toNum(v){ try{return parseFloat(String(v).replace(/,/g,'').trim())||0;}catch(e){return 0;} }
+
+// 從檔名解析月份
+function parseMonth(fname){
+  var m=fname.match(/2026[_\-]?(\d{2})/);
+  if(m) return '2026-'+m[1];
+  return null;
+}
+
+// ── UI ──
+var files = {};
+var resultJson = null;
+
+var dropArea = document.getElementById('drop-area');
+var fileInput = document.getElementById('file-input');
+var fileList  = document.getElementById('file-list');
+var btnConvert  = document.getElementById('btn-convert');
+var btnDownload = document.getElementById('btn-download');
+var statusEl    = document.getElementById('convert-status');
+
+dropArea.addEventListener('click', function(){ fileInput.click(); });
+dropArea.addEventListener('dragover', function(e){ e.preventDefault(); dropArea.classList.add('over'); });
+dropArea.addEventListener('dragleave', function(){ dropArea.classList.remove('over'); });
+dropArea.addEventListener('drop', function(e){ e.preventDefault(); dropArea.classList.remove('over'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', function(){ handleFiles(fileInput.files); });
+
+function handleFiles(flist){
+  Array.from(flist).forEach(function(f){
+    var mo = parseMonth(f.name);
+    if(mo){ files[mo] = f; }
+  });
+  renderFileList();
+}
+
+function renderFileList(){
+  var months = Object.keys(files).sort();
+  if(!months.length){ fileList.innerHTML=''; btnConvert.disabled=true; return; }
+  fileList.innerHTML = months.map(function(mo){
+    return '<div class="file-item"><span class="file-ok">✅</span><span>'+files[mo].name+'</span><span style="font-size:11px;color:#8b95b4;margin-left:auto">→ '+mo+'</span></div>';
+  }).join('');
+  btnConvert.disabled = false;
+}
+
+btnConvert.addEventListener('click', runConvert);
+
+function runConvert(){
+  btnConvert.disabled = true;
+  statusEl.className='status info'; statusEl.textContent='轉換中，請稍候…';
+  
+  var months = Object.keys(files).sort();
+  var processed = {};
+  var remaining = months.length;
+
+  months.forEach(function(mo){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      processed[mo] = wb;
+      remaining--;
+      if(remaining===0) buildJson(processed);
+    };
+    reader.readAsArrayBuffer(files[mo]);
+  });
+}
+
+function sheetToArr(wb, name){
+  var ws = wb.Sheets[name]; if(!ws) return [];
+  return XLSX.utils.sheet_to_json(ws, {defval:''});
+}
+
+function buildJson(wbs){
+  try{
+    var realMonths = Object.keys(wbs).sort();
+    var latestMo   = realMonths[realMonths.length-1];
+
+    // 保留原有 biz_data.json 裡的大使資料（從 window.__biz_data 如果有的話）
+    // 這個工具只重建 dist 部分
+
+    var allOverall = MONTHS_ALL.map(function(mo){
+      if(!wbs[mo]) return {month:mo,rev:0,gp:0,orders:0,prev_rev:0,prev_gp:0,prev_orders:0,avg_per_person:0,has_sales_count:0};
+      var brand = sheetToArr(wbs[mo],'品牌銷售概況').filter(function(r){return r['品牌'];});
+      var daily  = sheetToArr(wbs[mo],'訂單銷售概況');
+      var bpAll  = sheetToArr(wbs[mo],'經銷各品牌銷售概況');
+      var exclBrand={};
+      bpAll.forEach(function(r){
+        var acc=String(r['經銷帳號']||''), nm=String(r['經銷姓名']||'');
+        if(EXCLUDED_ACCS[acc]||EXCLUDED_NAMES[nm]){
+          var b=String(r['品牌']); exclBrand[b]=(exclBrand[b]||0)+toNum(r['銷售訂單總額']);
+        }
+      });
+      var rev=0,gp=0,ord=0;
+      brand.forEach(function(r){ var b=String(r['品牌']); var ex=exclBrand[b]||0; rev+=Math.max(0,toNum(r['銷售訂單總額'])-ex); gp+=toNum(r['銷售 GP 總額']); ord+=toNum(r['訂單筆數']); });
+      var prevRev=0,prevGp=0,prevOrd=0;
+      daily.forEach(function(r){ prevRev+=toNum(r['去年同期 銷售訂單總額']||0); prevGp+=toNum(r['去年同期 銷售 GP 總額']||0); prevOrd+=toNum(r['去年同期 訂單筆數']||0); });
+      var sales=sheetToArr(wbs[mo],'經銷銷售概況').filter(function(r){return !EXCLUDED_ACCS[String(r['帳號'])]&&!EXCLUDED_NAMES[String(r['真實姓名'])];});
+      var hasSales=sales.filter(function(r){return toNum(r['個人銷售訂單總額'])>0;}).length;
+      return {month:mo,rev:Math.round(rev),gp:Math.round(gp),orders:Math.round(ord),prev_rev:Math.round(prevRev),prev_gp:Math.round(prevGp),prev_orders:Math.round(prevOrd),avg_per_person:hasSales?Math.round(rev/hasSales):0,has_sales_count:hasSales};
+    });
+
+    // brand_monthly
+    var brandSet={};
+    realMonths.forEach(function(mo){ sheetToArr(wbs[mo],'品牌銷售概況').forEach(function(r){if(r['品牌'])brandSet[r['品牌']]=1;}); });
+    var brandMonthly={};
+    Object.keys(brandSet).forEach(function(b){
+      brandMonthly[b]=MONTHS_ALL.map(function(mo){
+        if(!wbs[mo]) return {month:mo,rev:0,gp:0,orders:0};
+        var brand=sheetToArr(wbs[mo],'品牌銷售概況').filter(function(r){return String(r['品牌'])===b;});
+        var bpRows=sheetToArr(wbs[mo],'經銷各品牌銷售概況').filter(function(r){return String(r['品牌'])===b;});
+        var excl=0; bpRows.forEach(function(r){if(EXCLUDED_ACCS[String(r['經銷帳號'])]||EXCLUDED_NAMES[String(r['經銷姓名'])])excl+=toNum(r['銷售訂單總額']);});
+        if(!brand.length) return {month:mo,rev:0,gp:0,orders:0};
+        var r=brand[0]; return {month:mo,rev:Math.max(0,Math.round(toNum(r['銷售訂單總額'])-excl)),gp:Math.round(toNum(r['銷售 GP 總額'])),orders:Math.round(toNum(r['訂單筆數']))};
+      });
+    });
+
+    // personal monthly（用最新月份的銷售人員）
+    var personalMap={};
+    realMonths.forEach(function(mo){
+      sheetToArr(wbs[mo],'經銷銷售概況').forEach(function(r){
+        var acc=String(r['帳號']);
+        if(EXCLUDED_ACCS[acc]||EXCLUDED_NAMES[String(r['真實姓名'])]) return;
+        if(!personalMap[acc]) personalMap[acc]={acc:acc,name:String(r['真實姓名']),level:String(r['等級']),monthly:{}};
+        MONTHS_ALL.forEach(function(m){ if(!personalMap[acc].monthly[m]) personalMap[acc].monthly[m]={rev:0,gp:0,orders:0}; });
+        personalMap[acc].monthly[mo]={rev:Math.round(toNum(r['個人銷售訂單總額'])),gp:Math.round(toNum(r['個人銷售 GP 總額'])),orders:Math.round(toNum(r['訂單筆數']))};
+        personalMap[acc].name=String(r['真實姓名']); personalMap[acc].level=String(r['等級']);
+      });
+    });
+    var personal=Object.values(personalMap);
+    var latestMoData=personalMap; // already has latest
+    personal.sort(function(a,b){return (b.monthly[latestMo]||{rev:0}).rev-(a.monthly[latestMo]||{rev:0}).rev;});
+    personal.forEach(function(p){ p.rev=(p.monthly[latestMo]||{rev:0}).rev; p.gp=(p.monthly[latestMo]||{gp:0}).gp; p.orders=(p.monthly[latestMo]||{orders:0}).orders; });
+
+    // daily（最新月份）
+    var daily=sheetToArr(wbs[latestMo],'訂單銷售概況').map(function(r){return {date:String(r['日期']),rev:Math.round(toNum(r['銷售訂單總額'])),gp:Math.round(toNum(r['銷售 GP 總額'])),orders:Math.round(toNum(r['訂單筆數'])),prev_rev:Math.round(toNum(r['去年同期 銷售訂單總額']||0)),prev_gp:Math.round(toNum(r['去年同期 銷售 GP 總額']||0))};});
+
+    // bundle（最新月份）
+    var bundleMap={};
+    sheetToArr(wbs[latestMo],'各經銷套組銷售概況').forEach(function(r){
+      var acc=String(r['帳號']); if(EXCLUDED_ACCS[acc]) return;
+      var amt=toNum(r['金額']||0); if(!amt) return;
+      var code=String(r['商品編號']);
+      if(!bundleMap[code]) bundleMap[code]={code:code,name:String(r['商品名稱']),brand:String(r['品牌']),qty:0,amount:0,sellers:{}};
+      bundleMap[code].qty+=Math.round(toNum(r['數量'])); bundleMap[code].amount+=Math.round(amt); bundleMap[code].sellers[acc]=1;
+    });
+    var bundleRank=Object.values(bundleMap).sort(function(a,b){return b.amount-a.amount;}).slice(0,30);
+    bundleRank.forEach(function(b){
+      b.sellers=Object.keys(b.sellers).length;
+      b.monthly=MONTHS_ALL.map(function(mo){
+        if(!wbs[mo]) return {month:mo,amount:0,qty:0,is_real:false};
+        var total=0,qty=0;
+        sheetToArr(wbs[mo],'各經銷套組銷售概況').forEach(function(r){if(String(r['商品編號'])===b.code&&!EXCLUDED_ACCS[String(r['帳號'])]){total+=toNum(r['金額']||0);qty+=toNum(r['數量']);}});
+        return {month:mo,amount:Math.round(total),qty:Math.round(qty),is_real:true};
+      });
+    });
+
+    // kpi
+    var latestOverall=allOverall.find(function(r){return r.month===latestMo;})||{};
+    var latestKpi={rev:latestOverall.rev||0,gp:latestOverall.gp||0,orders:latestOverall.orders||0,prev_rev:latestOverall.prev_rev||0,prev_gp:latestOverall.prev_gp||0,prev_orders:latestOverall.prev_orders||0,has_sales_count:latestOverall.has_sales_count||0,avg_per_person:latestOverall.avg_per_person||0};
+
+    // 蝦皮（簡化：只用 bpp 的最新月份比例估算）
+    var latestBpp={};
+    sheetToArr(wbs[latestMo],'經銷各品牌銷售概況').forEach(function(r){
+      var acc=String(r['經銷帳號']),b=String(r['品牌']),rev=toNum(r['銷售訂單總額']),gp=toNum(r['銷售 GP 總額']);
+      if(EXCLUDED_ACCS[acc]||EXCLUDED_NAMES[String(r['經銷姓名'])]||!rev) return;
+      if(!latestBpp[b]) latestBpp[b]={};
+      if(!latestBpp[b][acc]) latestBpp[b][acc]={acc:acc,name:String(r['經銷姓名']),level:String(r['經銷等級']),rev:0,gp:0};
+      latestBpp[b][acc].rev+=rev; latestBpp[b][acc].gp+=gp;
+    });
+
+    var shopeeMonthly=[]; 
+    var shopeeTotal={count:0,hr_count:0,ps_count:0,with_sales:0,rev:0,total_rev:latestKpi.rev};
+    // 簡化蝦皮：不重算，保留結構
+    var shopeeBrandMonthly={};
+    Object.keys(brandMonthly).forEach(function(b){
+      var sub=latestBpp[b]||{};
+      var totalB=Object.values(sub).reduce(function(s,p){return s+p.rev;},0);
+      var hrRev=0,psRev=0;
+      Object.keys(sub).forEach(function(acc){ if(SHOPEE_HIGH[acc])hrRev+=sub[acc].rev; });
+      var ratioHr=totalB?hrRev/totalB:0, ratioPs=0;
+      var monthly=brandMonthly[b].map(function(r){
+        var t=r.rev, hr=Math.round(t*ratioHr), ps=Math.round(t*ratioPs);
+        return {month:r.month,total_rev:t,hr_rev:hr,ps_rev:ps,shopee_rev:hr+ps,shopee_pct:t?Math.round((hr+ps)/t*1000)/10:0,hr_pct:t?Math.round(hr/t*1000)/10:0,ps_pct:0,is_real:realMonths.indexOf(r.month)>=0};
+      });
+      shopeeBrandMonthly[b]={brand:b,real_total:Math.round(totalB),real_hr:Math.round(hrRev),real_ps:Math.round(psRev),real_shopee:Math.round(hrRev+psRev),real_pct:totalB?Math.round((hrRev+psRev)/totalB*1000)/10:0,monthly:monthly,members:[],hr_count:0,ps_count:0};
+    });
+    allOverall.forEach(function(mo,i){
+      var hr=Object.values(shopeeBrandMonthly).reduce(function(s,b){return s+(b.monthly[i]||{hr_rev:0}).hr_rev;},0);
+      var ps=0, t=mo.rev;
+      shopeeMonthly.push({month:mo.month,total_rev:t,hr_rev:hr,ps_rev:ps,non_shopee_rev:Math.max(0,t-hr-ps),shopee_rev:hr+ps,hr_pct:t?Math.round(hr/t*1000)/10:0,ps_pct:0,shopee_pct:t?Math.round((hr+ps)/t*1000)/10:0,is_real:realMonths.indexOf(mo.month)>=0});
+    });
+
+    var result={
+      meta:{months:MONTHS_ALL,real:latestMo,updated:new Date().toISOString().slice(0,10),real_months:realMonths},
+      dist:{kpi:latestKpi,overall_monthly:allOverall,brand_monthly:brandMonthly,brand_per_person:{},brand_team_rank:{},daily:daily,personal:personal,teams:[],bundle_rank:bundleRank,bundle_brand_monthly:{},shopee_member_list:[],shopee_brand_monthly:shopeeBrandMonthly,shopee_monthly_overall:shopeeMonthly,shopee_total:shopeeTotal,total_members:personal.length},
+      exclusion_list:[{acc:'930530',name:'何佩蓉',reason:'業績已不隸屬系統',added:'2026-05'}]
+    };
+
+    resultJson = JSON.stringify(result, null, 0);
+    statusEl.className='status ok';
+    statusEl.innerHTML='✅ 轉換完成！已處理 '+realMonths.length+' 個月份：<b>'+realMonths.join('、')+'</b><br>最新月份：<b>'+latestMo+'</b>｜有業績 <b>'+latestKpi.has_sales_count+'</b> 人｜KPI NT$ <b>'+Math.round(latestKpi.rev).toLocaleString()+'</b>';
+    btnDownload.disabled=false;
+    btnConvert.disabled=false;
+  }catch(err){
+    statusEl.className='status err'; statusEl.textContent='❌ 轉換失敗：'+err.message;
+    btnConvert.disabled=false;
+    console.error(err);
+  }
+}
+
+btnDownload.addEventListener('click', function(){
+  if(!resultJson) return;
+  var blob=new Blob([resultJson],{type:'application/json'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='biz_data.json'; a.click();
+});
+</script>
+</body>
+</html>
