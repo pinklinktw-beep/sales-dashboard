@@ -239,6 +239,8 @@ input[type=text]{width:165px}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* Empty */
 .empty{text-align:center;padding:24px;color:var(--tx3);font-size:13px}
+.sp-result-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;transition:background .1s}
+.sp-result-row:hover{background:#fef3c7}
 </style>
 </head><body>
 <div class="layout">
@@ -540,6 +542,9 @@ function setSys(s){
   document.getElementById('stA').classList.toggle('on',s==='amb');
   document.getElementById('tb-sys').textContent=s==='dist'?'經銷':'大使';
   SEL=REAL; SEL_BRD='ALL'; SEL_BD_BRD='ALL';
+  // 切體系時重置等級下拉（因為兩個體系等級不同）
+  var lvSel=document.getElementById('pe-lv');
+  if(lvSel){ while(lvSel.options.length>1)lvSel.remove(1); }
   rerender();
 }
 function rerender(){
@@ -732,7 +737,11 @@ function renderPersonal(){
   rows=rows.slice().sort(function(a,b){return ((b.monthly[SEL]||{}).rev||0)-((a.monthly[SEL]||{}).rev||0);});
   document.getElementById('pe-desc').textContent='共'+rows.length+'人 | '+SEL.slice(5)+'月'+(SEL_BRD!==ALL_BRANDS_KEY?' | '+SEL_BRD:'');
   var mx=rows[0]?(rows[0].monthly[SEL]||{}).rev||0:1;
-  document.getElementById('pe-body').innerHTML='<div>'+rows.filter(function(r){return (r.monthly[SEL]||{}).rev>0;}).slice(0,60).map(function(r,i){
+  var filteredRows=rows.filter(function(r){return (r.monthly[SEL]||{}).rev>0;});
+  if(rows.length>0&&filteredRows.length===0){
+    document.getElementById('pe-desc').textContent='共'+rows.length+'人找到 | '+SEL.slice(5)+'月無業績';
+  }
+  document.getElementById('pe-body').innerHTML='<div>'+(filteredRows.length===0&&rows.length===0?'<div class="empty">找不到符合的結果</div>':filteredRows.slice(0,60).map(function(r,i){
     var m=r.monthly[SEL]||{rev:0,gp:0}, rev=m.rev||0, gpr=rev&&m.gp?(m.gp/rev*100).toFixed(0):0;
     var pidx=MONTHS.indexOf(SEL), prv=pidx>0?(r.monthly[MONTHS[pidx-1]]||{}).rev:null;
     var rc=i<3?['r1','r2','r3'][i]:'', medal=i<3?['🥇','🥈','🥉'][i]:'#'+(i+1);
@@ -976,6 +985,43 @@ function renderOrg(){
     return 0;
   });}
   var wrap=document.getElementById('org-tree-wrap'); wrap.innerHTML='';
+  // 搜尋結果面板
+  var resultPanel=document.getElementById('org-search-results');
+  if(!resultPanel){
+    resultPanel=document.createElement('div');
+    resultPanel.id='org-search-results';
+    wrap.parentNode.insertBefore(resultPanel,wrap);
+  }
+  if(q){
+    // 找所有符合的節點（不限根節點）
+    var matches=Object.values(nodes).filter(function(n){return selfMatch(n,q);})
+      .sort(function(a,b){return (b.rev||0)-(a.rev||0);}).slice(0,20);
+    resultPanel.innerHTML=matches.length?
+      '<div style="background:#fff7ed;border:1px solid #fcd34d;border-radius:8px;padding:11px 14px;margin-bottom:12px">'+
+        '<div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:8px">🔍 搜尋「'+q+'」找到 '+matches.length+' 筆</div>'+
+        matches.map(function(n){
+          var rTag=n.shopee==='high_risk'?'<span class="tag tg-sp" style="font-size:9.5px">🔴</span>':
+                   n.shopee==='possible'?'<span class="tag tg-y" style="font-size:9.5px">🟡</span>':'';
+          var exTag=n.excluded?'<span class="tag tg-r" style="font-size:9.5px">🚫</span>':'';
+          return '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;transition:background .1s" '+
+            'class="sp-result-row">'+
+            '<div style="flex:1">'+
+              '<span style="font-size:13px;font-weight:700">'+n.name+'</span>'+
+              ' '+lvPill(n.level)+rTag+exTag+
+              '<code style="font-size:10px;color:var(--tx3);margin-left:5px">'+n.acc+'</code>'+
+              (n.parent&&nodes[n.parent]?' <span style="font-size:10px;color:var(--tx3)">↑ '+nodes[n.parent].name+'</span>':'')+
+            '</div>'+
+            '<div style="font-family:var(--mo);font-size:12px;font-weight:700;color:'+(n.rev>0?'var(--a)':'var(--tx3)')+'">'+
+              (n.rev>0?'NT$ '+fmt(n.rev):'—')+
+            '</div>'+
+          '</div>';
+        }).join('')+
+      '</div>':
+      '<div style="background:var(--rl);border:1px solid #fca5a5;border-radius:8px;padding:9px 14px;margin-bottom:12px;font-size:12px;color:var(--r)">找不到「'+q+'」</div>';
+  } else {
+    resultPanel.innerHTML='';
+  }
+
   sorted.forEach(function(acc){wrap.appendChild(buildRoot(acc,nodes,q));});
 }
 
