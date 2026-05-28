@@ -711,7 +711,7 @@ function renderOv(){
   var prv=idx>0?d.overall_monthly[idx-1]:null;
   var gpr=cur.rev?(cur.gp/cur.rev*100).toFixed(1):0;
   var mx=Math.max.apply(null,d.overall_monthly.map(function(r){return r.rev;}));
-  var hasSales=cur.has_sales_count||1;
+  var hasSales=cur.has_sales_count||(ORG0[SYS]?ORG0[SYS].stats.has_sales||1:1);
   document.getElementById('ov-kpi').innerHTML=
     kpiCard('銷售訂單總額','💰','NT$ '+fmt(cur.rev),prv?chg(cur.rev,prv.rev):'','vs 上月',mx?Math.round(cur.rev/mx*100):0,'#2563eb')+
     kpiCard('銷售 GP 總額','📊','NT$ '+fmt(cur.gp),prv?chg(cur.gp,prv.gp):'','GP率 '+gpr+'%',Math.round(Number(gpr)/50*100),'#10b981')+
