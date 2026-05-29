@@ -324,7 +324,7 @@ input[type=text]{width:165px}
       </div>
       <div class="krow" id="ov-kpi"></div>
       <div class="cg cg2">
-        <div class="card"><div class="card-t">月度銷售趨勢</div><div class="card-s">柱=銷售額，折線=GP</div><canvas id="ov-rev-c"></canvas></div>
+        <div class="card"><div class="card-t">月度銷售趨勢</div><div class="card-s">柱=銷售額，折線=YoY%（vs 去年同月）</div><canvas id="ov-rev-c"></canvas></div>
         <div class="card"><div class="card-t">各品牌每月銷售</div><div class="card-s">選定月份各品牌佔比</div><canvas id="ov-brand-c"></canvas></div>
       </div>
       <div class="tw">
@@ -530,6 +530,13 @@ var EX=[], MONTHS=[], REAL='';
 var SYS='dist', PAGE='overview', SEL='', SEL_BRD='ALL', SEL_BD_BRD='ALL';
 var CH={}, ALL_BRANDS_KEY='ALL';
 var ORG_SYS='dist', ORG_EXP={}, ORG_Q='';
+var _bizRevMap={};
+function _buildBizRevMap(){
+  _bizRevMap={};
+  var d=D(); if(!d||!d.personal)return;
+  d.personal.forEach(function(p){_bizRevMap[p.acc]=(p.monthly[SEL]||{}).rev||0;});
+}
+function getBizMonthlyRev(acc){return _bizRevMap[acc]||0;}
 
 /* ── 格式化 ── */
 var fmt  = function(n){ return n?Math.round(Number(n)).toLocaleString('zh-TW'):'-'; };
@@ -726,11 +733,12 @@ function renderOv(){
     data:{labels:MONTHS.map(function(m){return m.slice(5)+'月'+(isReal(m)?'★':'');}),datasets:[
       {label:'銷售額',data:d.overall_monthly.map(function(r){return r.rev;}),
         backgroundColor:MONTHS.map(function(m){return isReal(m)?'#2563eb':'#bfdbfe';}),borderRadius:4,order:2},
-      {type:'line',label:'GP',data:d.overall_monthly.map(function(r){return r.gp;}),
-        borderColor:'#10b981',backgroundColor:'transparent',tension:.3,pointRadius:3,yAxisID:'y2',order:1}
+      {type:'line',label:'YoY%',data:d.overall_monthly.map(function(r){return r.prev_rev>0?Math.round((r.rev-r.prev_rev)/r.prev_rev*1000)/10:null;}),
+        borderColor:'#7c3aed',backgroundColor:'transparent',tension:.3,pointRadius:4,yAxisID:'y2',order:1,spanGaps:false,
+        datalabels:{display:true,color:'#7c3aed',font:{size:10,weight:'700'},formatter:function(v){return v===null?'':v+'%';}}}
     ]},options:{responsive:true,plugins:{legend:{labels:{font:{size:11},boxWidth:10}}},
       scales:{y:{ticks:{callback:function(v){return fmtK(v);},font:{size:11}},grid:{color:'#edf1f7'}},
-              y2:{position:'right',ticks:{callback:function(v){return fmtK(v);},font:{size:11}},grid:{display:false}}}}});
+              y2:{position:'right',ticks:{callback:function(v){return v+'%';},font:{size:11}},grid:{display:false}}}}});
   // 品牌圓餅（選定月份）
   var brands=Object.keys(d.brand_monthly);
   var brandRevs=brands.map(function(b){var mo=(d.brand_monthly[b]||[]).find(function(r){return r.month===SEL;}); return mo?mo.rev:0;});
@@ -1012,6 +1020,7 @@ function countSalesInTree(acc,nodes){var n=nodes[acc];if(!n)return 0;var cnt=(n.
 
 function renderOrg(){
   if(!ORG0)return;
+  _buildBizRevMap();
   var org=ORG_SYS==='dist'?ORG0.dist:ORG0.amb;
   var nodes=org.nodes, roots=org.roots, stats=org.stats;
   var q=ORG_Q;
@@ -1041,7 +1050,7 @@ function renderOrg(){
   if(q){
     // 找所有符合的節點（不限根節點）
     var matches=Object.values(nodes).filter(function(n){return selfMatch(n,q);})
-      .sort(function(a,b){return (b.rev||0)-(a.rev||0);}).slice(0,20);
+      .sort(function(a,b){return getBizMonthlyRev(b.acc)-getBizMonthlyRev(a.acc);}).slice(0,20);
     resultPanel.innerHTML=matches.length?
       '<div style="background:#fff7ed;border:1px solid #fcd34d;border-radius:8px;padding:11px 14px;margin-bottom:12px">'+
         '<div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:8px">🔍 搜尋「'+q+'」找到 '+matches.length+' 筆</div>'+
@@ -1057,9 +1066,10 @@ function renderOrg(){
               '<code style="font-size:10px;color:var(--tx3);margin-left:5px">'+n.acc+'</code>'+
               (n.parent&&nodes[n.parent]?' <span style="font-size:10px;color:var(--tx3)">↑ '+nodes[n.parent].name+'</span>':'')+
             '</div>'+
-            '<div style="font-family:var(--mo);font-size:12px;font-weight:700;color:'+(n.rev>0?'var(--a)':'var(--tx3)')+'">'+
-              (n.rev>0?'NT$ '+fmt(n.rev):'—')+
-            '</div>'+
+            '<div style="text-align:right"><div style="font-size:9px;color:var(--tx3)">'+SEL.slice(5)+'月業績</div>'+
+            '<div style="font-family:var(--mo);font-size:12px;font-weight:700;color:'+(getBizMonthlyRev(n.acc)>0?'var(--a)':'var(--tx3)')+'">'+
+              (getBizMonthlyRev(n.acc)>0?'NT$ '+fmt(getBizMonthlyRev(n.acc)):'—')+
+            '</div></div>'+
           '</div>';
         }).join('')+
       '</div>':
@@ -1087,9 +1097,9 @@ function buildRoot(acc,nodes,q){
       '<div class="tc-acc">'+lvPill(n.level)+orgBadges(n)+'<code style="font-size:10px;color:var(--tx3)">'+n.acc+'</code>'+
       (hasC?'<span class="tg-gray tag" style="font-size:9.5px">'+n.team_size+'人</span>':'')+
     '</div></div>'+
-    '<div class="tc-nums"><div class="tc-tl">本月銷售</div>'+
-      (n.excluded?'<div style="font-size:11px;color:var(--tx3);text-decoration:line-through">'+fmt(n.rev)+'</div>':
-       n.rev>0?'<div class="tc-tr" style="color:#10b981;font-size:13px">'+fmt(n.rev)+'</div>':'<div style="color:var(--tx3)">—</div>')+
+    '<div class="tc-nums"><div class="tc-tl">'+SEL.slice(5)+'月業績</div>'+
+      (n.excluded?'<div style="font-size:11px;color:var(--tx3);text-decoration:line-through">'+fmt(getBizMonthlyRev(acc))+'</div>':
+       getBizMonthlyRev(acc)>0?'<div class="tc-tr" style="color:#10b981;font-size:13px">'+fmt(getBizMonthlyRev(acc))+'</div>':'<div style="color:var(--tx3)">—</div>')+
       (hasC?'<div style="font-size:9.5px;color:var(--tx3);margin-top:3px;text-align:right">團 '+fmt(n.team_rev)+'</div>':'')+
     '</div>';
   var childDiv=document.createElement('div'); childDiv.id='orgc_'+acc; childDiv.style.borderTop='1px solid var(--bd)'; childDiv.style.display=isExp?'':'none';
@@ -1120,9 +1130,9 @@ function buildChild(acc,nodes,q,depth){
   infoEl.innerHTML='<div class="tc-mn dp-row-clickable" data-acc="'+acc+'" style="'+nameStyle+'">'+n.name+' '+lvPill(n.level)+orgBadges(n)+(hasC?'<span style="font-size:10px;color:var(--tx3);margin-left:3px">'+n.children.length+'↓</span>':'')+
     '</div><div style="margin-top:1px"><code style="font-size:10px;color:var(--tx3)">'+n.acc+'</code></div>';
   var numEl=document.createElement('div'); numEl.style.cssText='display:flex;gap:10px;align-items:flex-start;flex-shrink:0';
-  numEl.innerHTML=(n.excluded?'<div><div style="font-size:9px;color:var(--tx3)">本月銷售</div><div style="font-family:var(--mo);font-size:12px;color:var(--tx3);text-decoration:line-through">'+fmt(n.rev)+'</div></div>':
-    (n.rev>0?'<div><div style="font-size:9px;color:var(--tx3)">本月銷售</div><div class="tc-mv" style="color:#10b981">'+fmt(n.rev)+'</div></div>':
-             '<div><div style="font-size:9px;color:var(--tx3)">本月銷售</div><div style="font-size:12px;color:var(--tx3)">—</div></div>'))+
+  numEl.innerHTML=(n.excluded?'<div><div style="font-size:9px;color:var(--tx3)">'+SEL.slice(5)+'月業績</div><div style="font-family:var(--mo);font-size:12px;color:var(--tx3);text-decoration:line-through">'+fmt(getBizMonthlyRev(acc))+'</div></div>':
+    (getBizMonthlyRev(acc)>0?'<div><div style="font-size:9px;color:var(--tx3)">'+SEL.slice(5)+'月業績</div><div class="tc-mv" style="color:#10b981">'+fmt(getBizMonthlyRev(acc))+'</div></div>':
+             '<div><div style="font-size:9px;color:var(--tx3)">'+SEL.slice(5)+'月業績</div><div style="font-size:12px;color:var(--tx3)">—</div></div>'))+
     (hasC&&n.team_rev>0?'<div><div style="font-size:9px;color:var(--tx3)">團隊</div><div class="tc-mv" style="color:var(--a)">'+fmt(n.team_rev)+'</div></div>':'');
   row.appendChild(togEl); row.appendChild(dotEl); row.appendChild(infoEl); row.appendChild(numEl); wrap.appendChild(row);
   if(hasC){
