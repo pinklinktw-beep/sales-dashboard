@@ -266,6 +266,17 @@ input[type=text]{width:165px}
 .dp-mo-zero .dp-mo-val{color:var(--tx3)}
 .dp-row-clickable{cursor:pointer}
 .dp-row-clickable:hover .pe-name,.dp-row-clickable:hover .tc-mn{color:var(--a2);text-decoration:underline}
+/* 區間查詢 */
+.dp-range-bar{background:var(--alt);border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-bottom:14px}
+.dp-range-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.dp-range-lbl{font-size:11px;font-weight:800;color:var(--a);white-space:nowrap}
+.dp-range-sel{padding:3px 7px;border:1px solid var(--bd2);border-radius:5px;font-size:12px;font-family:var(--fn);background:var(--sur);color:var(--tx);cursor:pointer}
+.dp-range-krow{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.dp-range-kc{background:var(--sur);border-radius:7px;padding:8px 10px;border:1px solid var(--bd)}
+.dp-range-kv{font-family:var(--mo);font-size:14px;font-weight:800;line-height:1;margin-top:3px;color:var(--a)}
+.dp-range-kl{font-size:10px;color:var(--tx3)}
+.dp-mo-in-range .dp-mo-bar{background:#7c3aed}
+.dp-mo-in-range .dp-mo-lbl{color:#7c3aed;font-weight:800}
 </style>
 </head><body>
 <div class="layout">
@@ -494,6 +505,15 @@ input[type=text]{width:165px}
   </div>
   <div class="dp-body">
     <div class="dp-krow" id="dp-kpi"></div>
+    <div class="dp-range-bar">
+      <div class="dp-range-row">
+        <span class="dp-range-lbl">📅 區間查詢</span>
+        <select id="dp-from" class="dp-range-sel"></select>
+        <span style="font-size:12px;color:var(--tx3);padding:0 2px">→</span>
+        <select id="dp-to" class="dp-range-sel"></select>
+      </div>
+      <div class="dp-range-krow" id="dp-range-kpi"></div>
+    </div>
     <div class="sec" style="margin-bottom:11px">各月銷售明細</div>
     <div id="dp-monthly"></div>
     <div style="margin-top:14px"><canvas id="dp-chart" style="max-height:140px"></canvas></div>
@@ -1149,10 +1169,32 @@ function renderExclusion(){
 
 
 /* ══ 個人詳細面板 ══ */
+var _dpAcc='';
+function renderRangeKpi(p,fromM,toM,realMos,maxRev){
+  var rangeMos=realMos.filter(function(m){return m>=fromM&&m<=toM;});
+  var rRev=rangeMos.reduce(function(s,m){return s+((p.monthly[m]||{}).rev||0);},0);
+  var rGp =rangeMos.reduce(function(s,m){return s+((p.monthly[m]||{}).gp||0);},0);
+  var rAct=rangeMos.filter(function(m){return (p.monthly[m]||{}).rev>0;}).length;
+  var rAvg=rAct?Math.round(rRev/rAct):0;
+  var rGpr=rRev?Math.round(rGp/rRev*100):0;
+  var label=fromM===toM?fromM.slice(5)+'月':fromM.slice(5)+'~'+toM.slice(5)+'月';
+  document.getElementById('dp-range-kpi').innerHTML=
+    '<div class="dp-range-kc"><div class="dp-range-kl">區間銷售 ('+label+')</div><div class="dp-range-kv">NT$ '+fmt(rRev)+'</div></div>'+
+    '<div class="dp-range-kc"><div class="dp-range-kl">區間 GP ('+rGpr+'%)</div><div class="dp-range-kv" style="color:var(--g2)">NT$ '+fmt(rGp)+'</div></div>'+
+    '<div class="dp-range-kc"><div class="dp-range-kl">有業績月數</div><div class="dp-range-kv" style="color:var(--tx)">'+rAct+' / '+rangeMos.length+'</div></div>'+
+    '<div class="dp-range-kc"><div class="dp-range-kl">月均銷售</div><div class="dp-range-kv" style="color:var(--tx)">NT$ '+fmt(rAvg)+'</div></div>';
+  /* 更新月份列高亮 */
+  document.querySelectorAll('.dp-monthly-row').forEach(function(row){
+    var mo=row.dataset.month;
+    if(mo&&mo>=fromM&&mo<=toM) row.classList.add('dp-mo-in-range');
+    else row.classList.remove('dp-mo-in-range');
+  });
+}
 function openDetail(acc){
   var d=D(); if(!d) return;
   var p=d.personal.find(function(x){return x.acc===acc;});
   if(!p) return;
+  _dpAcc=acc;
   document.getElementById('dp-name').textContent=p.name;
   document.getElementById('dp-meta').innerHTML=
     lvPill(p.level)+
@@ -1168,7 +1210,15 @@ function openDetail(acc){
     '<div class="dp-kc"><div class="dp-kl">累計 GP</div><div class="dp-kv" style="color:var(--g2)">NT$ '+fmt(totalGp)+' ('+gpr+'%)</div></div>'+
     '<div class="dp-kc"><div class="dp-kl">有業績月數</div><div class="dp-kv">'+activeMos+' / '+realMos.length+'</div></div>'+
     '<div class="dp-kc"><div class="dp-kl">月均銷售</div><div class="dp-kv">NT$ '+fmt(avgMo)+'</div></div>';
+  /* 初始化區間選單 */
+  var selFrom=document.getElementById('dp-from');
+  var selTo=document.getElementById('dp-to');
+  selFrom.innerHTML=realMos.map(function(m){return '<option value="'+m+'">'+m.slice(5)+'月</option>';}).join('');
+  selTo.innerHTML  =realMos.map(function(m){return '<option value="'+m+'">'+m.slice(5)+'月</option>';}).join('');
+  selFrom.value=realMos[0];
+  selTo.value=REAL;
   var maxRev=Math.max.apply(null,realMos.map(function(m){return (p.monthly[m]||{}).rev||0;}))||1;
+  /* 月份列 */
   document.getElementById('dp-monthly').innerHTML=realMos.map(function(m,i){
     var mv=p.monthly[m]||{rev:0,gp:0};
     var rev=mv.rev||0, gp=mv.gp||0;
@@ -1179,13 +1229,27 @@ function openDetail(acc){
       var pct=((rev-prev)/prev*100).toFixed(1);
       chgH=rev>=prev?'<span class="mom-u">'+String.fromCharCode(9650)+pct+'%</span>':'<span class="mom-d">'+String.fromCharCode(9660)+Math.abs(pct)+'%</span>';
     }
-    return '<div class="dp-monthly-row'+(rev===0?' dp-mo-zero':'')+'">'+
+    return '<div class="dp-monthly-row'+(rev===0?' dp-mo-zero':'')+'" data-month="'+m+'">'+
       '<div class="dp-mo-lbl">'+m.slice(5)+'月'+(isReal(m)?'*':'')+'</div>'+
       '<div class="dp-mo-bar-wrap"><div class="dp-mo-bar" style="width:'+Math.round(rev/maxRev*100)+'%"></div></div>'+
       '<div class="dp-mo-val">'+(rev>0?'NT$ '+fmt(rev):'--')+'</div>'+
       '<div class="dp-mo-gp">'+(gp>0?'GP '+gpr2+'%':'')+'</div>'+
       '<div class="dp-mo-chg">'+chgH+'</div></div>';
   }).join('');
+  /* 初始區間 KPI */
+  renderRangeKpi(p,realMos[0],REAL,realMos,maxRev);
+  /* 區間選單事件 */
+  function onRangeChange(){
+    var f=selFrom.value, t=selTo.value;
+    if(f>t){selTo.value=f; t=f;}
+    var d2=D(); if(!d2)return;
+    var p2=d2.personal.find(function(x){return x.acc===_dpAcc;}); if(!p2)return;
+    var rm2=MONTHS.filter(function(m){return isReal(m);});
+    var mx2=Math.max.apply(null,rm2.map(function(m){return (p2.monthly[m]||{}).rev||0;}))||1;
+    renderRangeKpi(p2,f,t,rm2,mx2);
+  }
+  selFrom.onchange=onRangeChange;
+  selTo.onchange=onRangeChange;
   dc('dp-chart');
   CH['dp-chart']=new Chart(document.getElementById('dp-chart'),{type:'line',
     data:{labels:realMos.map(function(m){return m.slice(5)+'M';}),
